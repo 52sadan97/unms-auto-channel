@@ -53,7 +53,7 @@ Sistem ayağa kalktığında Telegram botunuza gidip `/start` yazmanız yeterlid
 ## 🛠️ Manuel Docker-Compose Kurulumu
 Eğer arayüzsüz bir Linux makinesindeyseniz, SSH üzerinden repo'yu klonlayıp çalıştırabilirsiniz:
 ```bash
-git clone https://github.com/KULLANICI_ADINIZ/unms-auto-channel.git
+git clone https://github.com/52sadan97/unms-auto-channel.git
 cd unms-auto-channel
 # docker-compose.yml dosyasındaki tokenları nano komutu ile düzenleyin:
 nano docker-compose.yml 
