@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configs and state
+config/config.ini
+config/state.json
+config/backups/
+config/*.ini.bak
+config/*.json.bak
+
+# Docker and Env
+.env
+
+# OS Files
+.DS_Store
+Thumbs.db

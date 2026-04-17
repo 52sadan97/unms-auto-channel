@@ -1,0 +1,19 @@
+services:
+  unms-auto-channel:
+    build: .
+    container_name: unms-auto-channel
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config
+    environment:
+      - TZ=Europe/Istanbul
+      - UISP_TOKEN=your_uisp_token_here
+      - TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+      - TELEGRAM_ADMIN_CHAT_ID=your_chat_id_here
+      # Log seviyesini belirler. Detaylı loglar için 'DEBUG', normal loglar için 'INFO' kullanın.
+      - LOG_LEVEL=INFO
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
