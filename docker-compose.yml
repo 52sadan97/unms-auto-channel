@@ -4,7 +4,7 @@ services:
     container_name: unms-auto-channel
     restart: unless-stopped
     volumes:
-      - ./config:/app/config
+      - /root/unms-bot/config:/app/config
     environment:
       - TZ=Europe/Istanbul
       - UISP_TOKEN=your_uisp_token_here
