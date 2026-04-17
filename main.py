@@ -66,7 +66,7 @@ def get_all_devices(config):
     headers = {"x-auth-token": token}
 
     try:
-        response = requests.get(url, headers=headers, verify=verify_ssl)
+        response = requests.get(url, headers=headers, verify=verify_ssl, timeout=15)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -84,7 +84,7 @@ def get_device_details(config, device_id):
     headers = {"x-auth-token": token}
 
     try:
-        response = requests.get(url, headers=headers, verify=verify_ssl)
+        response = requests.get(url, headers=headers, verify=verify_ssl, timeout=15)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -103,7 +103,7 @@ def get_available_frequencies(config, device_id):
     headers = {"x-auth-token": token}
 
     try:
-        response = requests.get(primary_url, headers=headers, verify=verify_ssl)
+        response = requests.get(primary_url, headers=headers, verify=verify_ssl, timeout=15)
         response.raise_for_status()
         frequency_data = response.json()
         frequencies = [item['center'] for item in frequency_data if 'center' in item]
@@ -118,7 +118,7 @@ def get_available_frequencies(config, device_id):
         # Yöntem 2: /frequencies başarısız olursa /detail uç noktasını dene
         secondary_url = build_api_url(config, 'devices', device_id, 'detail')
         try:
-            response = requests.get(secondary_url, headers=headers, verify=verify_ssl)
+            response = requests.get(secondary_url, headers=headers, verify=verify_ssl, timeout=15)
             response.raise_for_status()
             device_detail = response.json()
             # Sağlanan yanıta göre, frekanslar airmax.frequencyList altında bir dizi içinde geliyor.
@@ -161,7 +161,7 @@ def get_device_configuration(config, device_id):
     headers = {"x-auth-token": token}
 
     try:
-        response = requests.get(url, headers=headers, verify=verify_ssl)
+        response = requests.get(url, headers=headers, verify=verify_ssl, timeout=15)
         response.raise_for_status()
         config_data = response.json()
         logging.debug(f"{device_id} ID'li cihazın tam yapılandırması: {json.dumps(config_data, indent=2)}")
@@ -217,7 +217,7 @@ def update_device_frequency(config, device_id, device_name, frequency, dry_run):
         return True
 
     try:
-        response = requests.put(url, headers=headers, json=data, verify=verify_ssl)
+        response = requests.put(url, headers=headers, json=data, verify=verify_ssl, timeout=15)
         response.raise_for_status()
         success_message = f"✅ **Frekans Değiştirildi**\n\nCihaz: `{device_name}`\nYeni Frekans: `{frequency} MHz`"
         logging.info(f"{device_name} cihazının frekansı başarıyla {frequency} MHz olarak değiştirildi.")
@@ -244,7 +244,7 @@ def reboot_device(config, device_id, device_name):
 
     try:
         # Çoğu UISP/AirOS versiyonu için POST metodu çalışır.
-        response = requests.post(url, headers=headers, verify=verify_ssl)
+        response = requests.post(url, headers=headers, verify=verify_ssl, timeout=15)
         response.raise_for_status()
         # API genellikle hemen 200 OK döner, asıl yeniden başlatma arka planda olur.
         logging.info(f"{device_name} cihazına POST metodu ile yeniden başlatma komutu başarıyla gönderildi.")
@@ -253,7 +253,7 @@ def reboot_device(config, device_id, device_name):
         # Eğer POST başarısız olursa (örn: 405 Method Not Allowed), PUT ile dene
         logging.warning(f"POST ile yeniden başlatma başarısız: {post_error}. PUT ile deneniyor...")
         try:
-            response = requests.put(url, headers=headers, verify=verify_ssl)
+            response = requests.put(url, headers=headers, verify=verify_ssl, timeout=15)
             response.raise_for_status()
             logging.info(f"{device_name} cihazına PUT metodu ile yeniden başlatma komutu başarıyla gönderildi.")
             return True
@@ -1481,43 +1481,51 @@ async def button_handler(update: Update, context: CallbackContext):
 
 def start_bot(token, config, bot_context_data):
     """Initializes and starts the Telegram bot."""
-    # python-telegram-bot v20+ asyncio tabanlıdır.
-    # Bot ayrı bir thread'de çalıştığı için, o thread için yeni bir event loop oluşturmalıyız.
     import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    import time
 
-    global BOT_INSTANCE, BOT_APPLICATION
-    application = Application.builder().token(token).build()
-    BOT_INSTANCE = application.bot
-    BOT_APPLICATION = application
+    while True:
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-    application.bot_data['loop'] = loop # Thread-safe çağrılar için döngüyü sakla
-    application.bot_data['config'] = config
-    application.bot_data['start_time'] = bot_context_data['script_start_time'] # Store the script start time
-    # Diğer fonksiyonların erişebilmesi için bazı yolları bot_data'ya ekleyelim
-    config_dir = os.path.join(os.path.dirname(__file__), 'config')
-    application.bot_data['state_path'] = os.path.join(config_dir, 'state.json')
-    application.bot_data['backup_dir'] = os.path.join(config_dir, 'backups')
-    try:
-        application.bot_data['backup_retention'] = config.getint('backup', 'retention_count', fallback=7)
-    except configparser.NoSectionError:
-        application.bot_data['backup_retention'] = 7
+            global BOT_INSTANCE, BOT_APPLICATION
+            application = Application.builder().token(token).build()
+            BOT_INSTANCE = application.bot
+            BOT_APPLICATION = application
 
-    application.bot_data['application'] = application # Restart/stop komutları için application'ı sakla
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("restart", restart_command))
-    application.add_handler(CommandHandler("stop", stop_command))
-    application.add_handler(CommandHandler("health", health_command))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    # Metin mesajlarını yakalamak için bir handler ekle
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+            application.bot_data['loop'] = loop # Thread-safe çağrılar için döngüyü sakla
+            application.bot_data['config'] = config
+            application.bot_data['start_time'] = bot_context_data['script_start_time'] # Store the script start time
+            # Diğer fonksiyonların erişebilmesi için bazı yolları bot_data'ya ekleyelim
+            config_dir = os.path.join(os.path.dirname(__file__), 'config')
+            application.bot_data['state_path'] = os.path.join(config_dir, 'state.json')
+            application.bot_data['backup_dir'] = os.path.join(config_dir, 'backups')
+            try:
+                application.bot_data['backup_retention'] = config.getint('backup', 'retention_count', fallback=7)
+            except configparser.NoSectionError:
+                application.bot_data['backup_retention'] = 7
 
-    logging.info("Telegram botu başlatıldı ve komutlar için dinlemede.")
-    # run_polling() is a blocking call. It will run until the application is stopped.
-    # stop_signals=None prevents it from trying to register signal handlers,
-    # which is only allowed in the main thread.
-    application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
+            application.bot_data['application'] = application # Restart/stop komutları için application'ı sakla
+            application.add_handler(CommandHandler("start", start_command))
+            application.add_handler(CommandHandler("restart", restart_command))
+            application.add_handler(CommandHandler("stop", stop_command))
+            application.add_handler(CommandHandler("health", health_command))
+            application.add_handler(CallbackQueryHandler(button_handler))
+            # Metin mesajlarını yakalamak için bir handler ekle
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+
+            logging.info("Telegram botu başlatıldı ve komutlar için dinlemede.")
+            # run_polling() is a blocking call. It will run until the application is stopped.
+            # stop_signals=None prevents it from trying to register signal handlers,
+            # which is only allowed in the main thread.
+            application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
+
+            # Eğer buraya başarılı bir şekilde ulaşıldıysa (bot durdurulduysa) döngüden çık
+            break
+        except Exception as e:
+            logging.error(f"Telegram bot iterasyonunda kritik bir hata oluştu: {e}. 15 saniye içinde yeniden başlatılacak...", exc_info=True)
+            time.sleep(15)
 
 
 @restricted
