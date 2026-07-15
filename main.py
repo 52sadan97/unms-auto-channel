@@ -111,39 +111,25 @@ def get_available_frequencies(config, device_id):
         return frequencies if frequencies else None # Boş liste yerine None döndür
     except requests.exceptions.RequestException as primary_error:
         if primary_error.response is not None and primary_error.response.status_code == 404:
-            logging.warning(f"{device_id} için birincil uç nokta /frequencies başarısız oldu (404). Yedek /detail uç noktası deneniyor.")
+            logging.warning(f"{device_id} için birincil uç nokta /frequencies başarısız oldu (404). Yedek /configuration uç noktası deneniyor.")
         else:
-            logging.warning(f"{device_id} için birincil uç nokta /frequencies başarısız oldu: {primary_error}. Yedek /detail uç noktası deneniyor.")
+            logging.warning(f"{device_id} için birincil uç nokta /frequencies başarısız oldu: {primary_error}. Yedek /configuration uç noktası deneniyor.")
 
-        # Yöntem 2: /frequencies başarısız olursa /detail uç noktasını dene
-        secondary_url = build_api_url(config, 'devices', device_id, 'detail')
-        try:
-            response = requests.get(secondary_url, headers=headers, verify=verify_ssl, timeout=15)
-            response.raise_for_status()
-            device_detail = response.json()
-            # Sağlanan yanıta göre, frekanslar airmax.frequencyList altında bir dizi içinde geliyor.
-            # Önce 'frequencyList' kontrol edilir, sonra 'frequencyBands'.
-            frequency_list_data = None
-            airmax_data = device_detail.get('airmax', {})
-            if 'frequencyList' in airmax_data:
-                frequency_list_data = airmax_data['frequencyList']
-                logging.debug(f"{device_id} için yedek yanıtta 'airmax.frequencyList' bulundu.")
-            elif 'frequencyBands' in airmax_data:
-                frequency_list_data = airmax_data['frequencyBands']
-                logging.debug(f"{device_id} için yedek yanıtta 'airmax.frequencyBands' bulundu.")
-
-            if frequency_list_data:
-                frequencies = [item[0] for item in frequency_list_data if isinstance(item, list) and len(item) > 0]
-                logging.info(f"{device_id} ID'li cihaz için yedek uç noktadan {len(frequencies)} adet frekans çekildi.")
-                return frequencies if frequencies else None
+        # Yöntem 2: /frequencies başarısız olursa yapılandırmayı okuyarak scanlist'ten al
+        config_data = get_device_configuration(config, device_id)
+        if config_data and 'wireless' in config_data:
+            scanlist = []
+            if 'interfaces' in config_data['wireless'] and len(config_data['wireless']['interfaces']) > 0:
+                scanlist = config_data['wireless']['interfaces'][0].get('frequency', {}).get('scanlist', {}).get('freq', [])
             else:
-                logging.warning(f"{device_id} için yedek uç nokta başarılı oldu, ancak ne 'airmax.frequencyList' ne de 'airmax.frequencyBands' bulundu.")
+                scanlist = config_data['wireless'].get('frequency', {}).get('scanlist', {}).get('freq', [])
+                
+            if scanlist:
+                logging.info(f"{device_id} ID'li cihaz için yapılandırmadan {len(scanlist)} adet frekans çekildi.")
+                return scanlist
+            else:
+                logging.warning(f"{device_id} için yapılandırmada scanlist bulunamadı.")
                 return None
-        except requests.exceptions.RequestException as secondary_error:
-            logging.error(f"Yedek /detail uç noktası da {device_id} için başarısız oldu: {secondary_error}")
-            return None
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
-        logging.error(f"{device_id} ID'li cihaz için frekans yanıtı ayrıştırılırken hata oluştu: {e}")
         return None
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logging.error(f"{device_id} ID'li cihaz için frekans yanıtı ayrıştırılırken hata oluştu: {e}")
